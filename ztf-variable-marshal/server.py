@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 import pymongo
 from aiohttp import multipart, web
+from aiohttp.web_request import MultiDictProxy
 from aiohttp_session import get_session, setup
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from bson.json_util import dumps, loads
@@ -3722,27 +3723,57 @@ async def search_post_handler(request):
         # print(_err)
         _query = await request.post()
 
+    catalogs = []
+    try:
+        for instance in request.app["kowalski"].instances.values():
+            catalogs.extend(instance.get("catalogs", []))
+
+        # keep only those that start with ZTF_sources_202
+        catalogs = sorted(
+            [c for c in catalogs if c.startswith("ZTF_sources_202")], reverse=True
+        )
+    except Exception as _e:
+        print(f"Failed to get catalogs: {str(_e)}")
+
     error = None
-    if _query is None or not isinstance(_query, dict) or len(_query) == 0:
-        error = "failure: no query specified"
-    elif (
-        "radec" not in _query
-        or not isinstance(_query["radec"], str)
-        or len(_query["radec"]) == 0
-    ):
-        error = "failure: no radec specified"
-    elif (
-        "cone_search_radius" not in _query
-        or not isinstance(_query["cone_search_radius"], (int, float))
-        or _query["cone_search_radius"] <= 0
-    ):
-        error = "failure: no cone_search_radius specified"
-    elif (
-        "cone_search_unit" not in _query
-        or not isinstance(_query["cone_search_unit"], str)
-        or _query["cone_search_unit"] not in ("arcsec", "arcmin", "deg")
-    ):
-        error = "failure: no cone_search_unit specified"
+    try:
+        if _query is None or not isinstance(_query, MultiDictProxy) or len(_query) == 0:
+            error = "failure: no query specified"
+        elif (
+            "radec" not in _query
+            or not isinstance(_query["radec"], str)
+            or len(_query["radec"]) == 0
+        ):
+            error = "failure: no radec specified"
+        elif (
+            "cone_search_radius" not in _query
+            or not isinstance(_query["cone_search_radius"], (int, float, str))
+            or len(_query["cone_search_radius"]) == 0
+        ):
+            error = "failure: no cone_search_radius specified"
+        elif (
+            not str(_query["cone_search_radius"]).isnumeric()
+            or float(_query["cone_search_radius"]) <= 0
+        ):
+            error = "failure: cone_search_radius must be a positive number and not zero"
+        elif (
+            "cone_search_unit" not in _query
+            or not isinstance(_query["cone_search_unit"], str)
+            or _query["cone_search_unit"] not in ("arcsec", "arcmin", "deg")
+        ):
+            error = "failure: no cone_search_unit specified"
+        elif (
+            "catalogs" not in _query
+            or not isinstance(_query["catalogs"], str)
+            or len(_query["catalogs"]) == 0
+        ):
+            error = "failure: no catalogs specified"
+        elif _query["catalogs"] not in catalogs:
+            error = "failure: invalid catalogs specified, must be in " + ", ".join(
+                catalogs
+            )
+    except Exception as _e:
+        error = f"failure: invalid query: {str(_e)}"
 
     if error is not None:
         context = {
@@ -3750,6 +3781,8 @@ async def search_post_handler(request):
             "user": session["user_id"],
             "programs": [],
             "messages": [[str(error), "danger"]],
+            "catalogs": catalogs,
+            "form": _query,
         }
         response = aiohttp_jinja2.render_template(
             "template-search.html", request, context
@@ -3768,27 +3801,7 @@ async def search_post_handler(request):
             else:
                 radec = f"[({ra}, {dec})]"
 
-        # print(radec)
         catalog = _query.get("catalogs", None)
-        if catalog is None:
-            return web.json_response(
-                {"message": "failure: no catalogs specified"}, status=200
-            )
-
-        instance = None
-        catalogs = []
-        for inst_name, inst in request.app["kowalski"].instances.items():
-            catalogs.extend(inst.get("catalogs", []))
-            if catalog in inst.get("catalogs", []):
-                instance = inst_name
-        if instance is None:
-            return web.json_response(
-                {"message": f"failure: no instance found for catalog {catalog}"},
-                status=400,
-            )
-        catalogs = sorted(
-            [c for c in catalogs if c.startswith("ZTF_sources_202")], reverse=True
-        )
 
         kowalski_query = {
             "query_type": "cone_search",
@@ -3834,64 +3847,62 @@ async def search_post_handler(request):
 
         resp = request.app["kowalski"].query(kowalski_query)
         # print(resp)
-
-        source_keys = list(
-            resp.get(instance, {}).get("data", {}).get(catalog, {}).keys()
-        )
+        sources = []
+        for instance_results in resp.values():
+            for catalog_results in instance_results.get("data", {}).values():
+                for cone in catalog_results.values():
+                    sources.extend(cone)
 
         data_formatted = []
-        for source_key in source_keys:
-            data = resp[instance]["data"][catalog][source_key]
-
+        for source in sources:
             # re-format data (mjd, mag, magerr) for easier previews in the browser:
-            for source in data:
 
-                lc = source["data"]
+            lc = source["data"]
 
-                # filter lc for MSIP data
-                if config["misc"]["filter_MSIP"]:
-                    lc = [
-                        p
-                        for p in lc
-                        if (
-                            (p["programid"] != 1)
-                            or (
-                                p["hjd"] - 2400000.5
-                                <= config["misc"]["filter_MSIP_best_before_mjd"]
-                            )
+            # filter lc for MSIP data
+            if config["misc"]["filter_MSIP"]:
+                lc = [
+                    p
+                    for p in lc
+                    if (
+                        (p["programid"] != 1)
+                        or (
+                            p["hjd"] - 2400000.5
+                            <= config["misc"]["filter_MSIP_best_before_mjd"]
                         )
-                    ]
-                    if len(lc) == 0:
-                        continue
+                    )
+                ]
+                if len(lc) == 0:
+                    continue
 
-                # print(lc)
-                mags = np.array([llc["mag"] for llc in lc])
-                magerrs = np.array([llc["magerr"] for llc in lc])
-                hjds = np.array([llc["hjd"] for llc in lc])
-                mjds = hjds - 2400000.5
-                datetimes = np.array(
-                    [
-                        mjd_to_datetime(llc["hjd"] - 2400000.5).strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        )
-                        for llc in lc
-                    ]
-                )
+            # print(lc)
+            mags = np.array([llc["mag"] for llc in lc])
+            magerrs = np.array([llc["magerr"] for llc in lc])
+            hjds = np.array([llc["hjd"] for llc in lc])
+            mjds = hjds - 2400000.5
+            datetimes = np.array(
+                [
+                    mjd_to_datetime(llc["hjd"] - 2400000.5).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    for llc in lc
+                ]
+            )
 
-                ind_sort = np.argsort(mjds)
-                mags = mags[ind_sort].tolist()
-                magerrs = magerrs[ind_sort].tolist()
-                mjds = mjds[ind_sort].tolist()
-                datetimes = datetimes[ind_sort].tolist()
+            ind_sort = np.argsort(mjds)
+            mags = mags[ind_sort].tolist()
+            magerrs = magerrs[ind_sort].tolist()
+            mjds = mjds[ind_sort].tolist()
+            datetimes = datetimes[ind_sort].tolist()
 
-                source.pop("data", None)
-                source["mag"] = mags
-                source["magerr"] = magerrs
-                # source['mjd'] = mjds
-                source["mjd"] = datetimes
-                source["catalog"] = catalog
+            source.pop("data", None)
+            source["mag"] = mags
+            source["magerr"] = magerrs
+            # source['mjd'] = mjds
+            source["mjd"] = datetimes
+            source["catalog"] = catalog
 
-                data_formatted.append(source)
+            data_formatted.append(source)
 
         # get ZVM programs:
         programs = (
