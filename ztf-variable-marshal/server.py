@@ -3722,6 +3722,42 @@ async def search_post_handler(request):
         # print(_err)
         _query = await request.post()
 
+    error = None
+    if _query is None or not isinstance(_query, dict) or len(_query) == 0:
+        error = "failure: no query specified"
+    elif (
+        "radec" not in _query
+        or not isinstance(_query["radec"], str)
+        or len(_query["radec"]) == 0
+    ):
+        error = "failure: no radec specified"
+
+    if (
+        "cone_search_radius" not in _query
+        or not isinstance(_query["cone_search_radius"], (int, float))
+        or _query["cone_search_radius"] <= 0
+    ):
+        error = "failure: no cone_search_radius specified"
+
+    if (
+        "cone_search_unit" not in _query
+        or not isinstance(_query["cone_search_unit"], str)
+        or _query["cone_search_unit"] not in ("arcsec", "arcmin", "deg")
+    ):
+        error = "failure: no cone_search_unit specified"
+
+    if error is not None:
+        context = {
+            "logo": config["server"]["logo"],
+            "user": session["user_id"],
+            "programs": [],
+            "messages": [[str(error), "danger"]],
+        }
+        response = aiohttp_jinja2.render_template(
+            "template-search.html", request, context
+        )
+        return response
+
     try:
         # convert to Kowalski query and execute
 
@@ -3766,7 +3802,9 @@ async def search_post_handler(request):
                 },
                 "catalogs": {
                     catalog: {
-                        "filter": _query["filter"] if len(_query["filter"]) > 0 else {},
+                        "filter": _query["filter"]
+                        if len(_query.get("filter", {})) > 0
+                        else {},
                         "projection": {
                             "_id": 1,
                             "ra": 1,
