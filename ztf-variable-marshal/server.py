@@ -2258,8 +2258,8 @@ async def source_hr_get_handler(request):
                 fig = plt.figure(figsize=(4, 4), dpi=200)
                 ax = fig.add_subplot(111)
                 ax.plot(
-                    bp - rp,
-                    g + 5 * np.log10(p / 1000) + 5,
+                    x,
+                    y,
                     "o",
                     markersize=8,
                     c="#f22f29",
@@ -2268,6 +2268,12 @@ async def source_hr_get_handler(request):
                 ax.set_aspect(1 / 4)
                 ax.set_ylabel("G")
                 ax.set_xlabel("BP-RP")
+                ax.set_title(
+                    f"BP-RP: {x:.4f}, G: {y:.4f}",
+                    fontsize=10,
+                    horizontalalignment="center",
+                    color="black",
+                )
                 plt.tight_layout(pad=0, h_pad=0, w_pad=0)
                 plt.savefig(buff, dpi=200, bbox_inches="tight")
                 buff.seek(0)
@@ -2388,8 +2394,8 @@ async def hr_get_handler(request):
                     fig = plt.figure(figsize=(4, 4), dpi=200)
                     ax = fig.add_subplot(111)
                     ax.plot(
-                        bp - rp,
-                        g + 5 * np.log10(p / 1000) + 5,
+                        x,
+                        y,
                         "o",
                         markersize=8,
                         c="#f22f29",
@@ -2398,6 +2404,12 @@ async def hr_get_handler(request):
                     ax.set_aspect(1 / 4)
                     ax.set_ylabel("G")
                     ax.set_xlabel("BP-RP")
+                    ax.set_title(
+                        f"BP-RP: {x:.4f}, G: {y:.4f}",
+                        fontsize=10,
+                        horizontalalignment="center",
+                        color="black",
+                    )
                     plt.tight_layout(pad=0, h_pad=0, w_pad=0)
                     plt.savefig(buff, dpi=200, bbox_inches="tight")
                     buff.seek(0)
