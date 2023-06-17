@@ -3731,14 +3731,12 @@ async def search_post_handler(request):
         or len(_query["radec"]) == 0
     ):
         error = "failure: no radec specified"
-
     elif (
         "cone_search_radius" not in _query
         or not isinstance(_query["cone_search_radius"], (int, float))
         or _query["cone_search_radius"] <= 0
     ):
         error = "failure: no cone_search_radius specified"
-
     elif (
         "cone_search_unit" not in _query
         or not isinstance(_query["cone_search_unit"], str)
