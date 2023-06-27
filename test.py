@@ -6,10 +6,11 @@ def test_connection():
     z = zvm(
         protocol="http",
         host="localhost",
-        port=4000,
+        port=8000,
         username="admin",
         password="admin",
     )
 
     # check connection
-    assert z.check_connection()
+    connection = z.check_connection()
+    assert connection is True

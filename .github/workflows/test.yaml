@@ -45,13 +45,10 @@ jobs:
           cat >> secrets.json << EOL
           {
             "server" : {
-              "admin_username": "ADMIN",
-              "admin_password": "PASSWORD"
+              "admin_username": "admin",
+              "admin_password": "admin"
             },
             "database": {
-              "host": "mongo",
-              "replica_set": "rs0",
-              "port": 27017,
               "admin": "mongoadmin",
               "admin_pwd": "mongoadminsecret",
               "user": "user",
@@ -67,7 +64,7 @@ jobs:
                   "password": "admin"
                 },
                 "kowalski": {
-                  "protocol": "https",
+                  "protocol": "http",
                   "host": "127.0.0.1",
                   "port": 6000,
                   "username": "admin",
