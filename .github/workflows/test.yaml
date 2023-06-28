@@ -27,8 +27,6 @@ jobs:
           python -m pip install --upgrade pip
           sed -i'' -e 's/4000/6000/g' config.defaults.yaml
           sed -i'' -e 's/4000/6000/g' docker-compose.defaults.yaml
-          cat config.defaults.yaml
-          cat docker-compose.defaults.yaml
           cp docker-compose.defaults.yaml docker-compose.yaml
           make docker_build && make docker_up
           make docker_test
@@ -63,16 +61,9 @@ jobs:
             },
             "kowalski": {
               "instances": {
-                "gloria": {
-                  "protocol": "http",
-                  "host": "host.docker.internal",
-                  "port": 6000,
-                  "username": "admin",
-                  "password": "admin"
-                },
                 "kowalski": {
                   "protocol": "http",
-                  "host": "gateway.docker.internal",
+                  "host": "172.17.0.1",
                   "port": 6000,
                   "username": "admin",
                   "password": "admin"
