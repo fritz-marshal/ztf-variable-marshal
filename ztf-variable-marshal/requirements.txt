@@ -17,7 +17,7 @@ numba==0.56.4
 numpy==1.23.5
 motor==3.1.2
 pandas==1.5.3
-penquins @ git+https://github.com/Theodlz/penquins.git@2.3.2
+penquins==2.3.2
 PyJWT==2.6.0
 pymongo==4.3.3
 pytest-aiohttp==1.0.4
