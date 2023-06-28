@@ -58,14 +58,14 @@ jobs:
               "instances": {
                 "gloria": {
                   "protocol": "http",
-                  "host": "localhost",
+                  "host": "host.docker.internal",
                   "port": 6000,
                   "username": "admin",
                   "password": "admin"
                 },
                 "kowalski": {
                   "protocol": "http",
-                  "host": "127.0.0.1",
+                  "host": "gateway.docker.internal",
                   "port": 6000,
                   "username": "admin",
                   "password": "admin"
@@ -106,11 +106,6 @@ jobs:
       - name: Docker Logs
         run: |
           docker logs ztf_variable_marshal
-
-      - name: Check if the marshal is up
-        run: |
-          curl -X POST http://localhost:8000/auth -H "Content-Type: application/json" -d '{"username": "admin", "password": "admin"}' --connect-timeout 5
-          curl -X POST http://0.0.0.0:8000/auth -H "Content-Type: application/json" -d '{"username": "admin", "password": "admin"}' --connect-timeout 5
 
       - name: Run tests
         run: |
