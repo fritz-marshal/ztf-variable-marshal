@@ -5,7 +5,7 @@ from zvm import zvm
 def test_connection():
     z = zvm(
         protocol="http",
-        host="localhost",
+        host="0.0.0.0",
         port=8000,
         username="admin",
         password="admin",
