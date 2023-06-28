@@ -83,7 +83,7 @@ jobs:
           docker build --rm -t ztf_variable_marshal:latest -f Dockerfile .
       - name: Start the marshal
         run: |
-          docker run --name ztf_variable_marshal -d --restart always -p 8000:4000 -v ztf_variable_marshal_data:/data --link ztf_variable_marshal_mongo_1:mongo ztf_variable_marshal:latest
+          docker run --name ztf_variable_marshal -d --restart always -p 8000:4000 -v ztf_variable_marshal_data:/data --link mongo:kowalski-mongo ztf_variable_marshal:latest
 
       - name: Wait for marshal to start
         run: |
