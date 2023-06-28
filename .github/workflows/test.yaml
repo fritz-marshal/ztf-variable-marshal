@@ -1,0 +1,112 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: "3.10"
+      - name: Fetch and set up Kowalski
+        uses: actions/checkout@v2
+        with:
+          repository: skyportal/kowalski
+          path: kowalski
+      - name: Configure and spin up Kowalski, ingest test data
+        run: |
+          cd kowalski
+          python -m pip install --upgrade pip
+          sed -i'' -e 's/4000/6000/g' config.defaults.yaml
+          sed -i'' -e 's/4000/6000/g' docker-compose.defaults.yaml
+          cp docker-compose.defaults.yaml docker-compose.yaml
+          make docker_build && make docker_up
+          make docker_test
+
+      - name: Debug Check that Kowalski is up
+        run: |
+          curl -X GET http://localhost:6000
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "wheel>=0.36.0"
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/pip
+          key: ${{ runner.os }}-${{ hashFiles('**/requirements*.txt') }}
+      - name: create secrets.json
+        run: |
+          touch secrets.json
+          cat >> secrets.json << EOL
+          {
+            "server" : {
+              "admin_username": "admin",
+              "admin_password": "admin"
+            },
+            "database": {
+              "admin": "mongoadmin",
+              "admin_pwd": "mongoadminsecret",
+              "user": "user",
+              "pwd": "pwd"
+            },
+            "kowalski": {
+              "instances": {
+                "kowalski": {
+                  "protocol": "http",
+                  "host": "172.17.0.1",
+                  "port": 6000,
+                  "username": "admin",
+                  "password": "admin"
+                }
+              }
+            }
+          }
+          EOL
+
+      - name: Less workers for testing
+        run: |
+          sed -i'' -e 's/-w 8/-w 2/g' Dockerfile
+
+      - name: Add volumes
+        run: |
+          docker volume create ztf_variable_marshal_mongodb
+          docker volume create ztf_variable_marshal_data
+
+      - name: Start mongo
+        run: |
+          docker run -d --restart always --name ztf_variable_marshal_mongo_1 -p 27025:27017 --expose 27025 \
+          -v ztf_variable_marshal_mongodb:/data/db \
+          -e MONGO_INITDB_ROOT_USERNAME=mongoadmin -e MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret \
+          mongo:latest
+
+      - name: Build the marshal
+        run: |
+          docker build --rm -t ztf_variable_marshal:latest -f Dockerfile .
+
+      - name: Start the marshal
+        run: |
+          docker run --name ztf_variable_marshal -d --restart always -p 8000:4000 -v ztf_variable_marshal_data:/data --link ztf_variable_marshal_mongo_1:mongo ztf_variable_marshal:latest
+
+      - name: Wait for marshal to start
+        run: |
+          sleep 15
+
+      - name: Docker Logs
+        run: |
+          docker logs ztf_variable_marshal
+
+      - name: Run tests
+        run: |
+          sleep 10
+          pip install requests pymongo pytest
+          python -m pytest test.py

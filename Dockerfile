@@ -1,4 +1,4 @@
-FROM python:3.7
+FROM python:3.10.10
 
 # Install: vim, git, cron
 RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
