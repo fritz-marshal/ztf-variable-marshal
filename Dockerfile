@@ -16,11 +16,6 @@ RUN mkdir -p /app && mkdir -p /app/logs && mkdir -p /data && mkdir -p /_tmp
 ## Create the log file to be able to run tail
 #RUN touch /var/log/cron.log
 
-# install cargo/rust (needed for some python libs)
-RUN curl https://sh.rustup.rs -sSf > rustup.sh
-RUN chmod 755 rustup.sh
-RUN ./rustup.sh -y
-
 # install python libs
 COPY ztf-variable-marshal/requirements.txt /app/
 RUN pip install -r /app/requirements.txt

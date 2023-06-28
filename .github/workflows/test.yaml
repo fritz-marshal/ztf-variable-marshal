@@ -49,13 +49,10 @@ jobs:
               "admin_password": "admin"
             },
             "database": {
-              "host": "mongo",
-              "port": 27017,
-              "replica_set": "rs0",
               "admin": "mongoadmin",
               "admin_pwd": "mongoadminsecret",
-              "user": "ztf",
-              "pwd": "ztf"
+              "user": "user",
+              "pwd": "pwd"
             },
             "kowalski": {
               "instances": {
@@ -77,17 +74,34 @@ jobs:
             }
           }
           EOL
-      - name: Build image
+
+      - name: Less workers for testing
         run: |
+          sed -i'' -e 's/-w 8/-w 2/g' Dockerfile
+
+      - name: Add volumes
+        run: |
+          docker volume create ztf_variable_marshal_mongodb
           docker volume create ztf_variable_marshal_data
+
+      - name: Start mongo
+        run: |
+          docker run -d --restart always --name ztf_variable_marshal_mongo_1 -p 27025:27017 --expose 27025 \
+          -v ztf_variable_marshal_mongodb:/data/db \
+          -e MONGO_INITDB_ROOT_USERNAME=mongoadmin -e MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret \
+          mongo:latest
+
+      - name: Build the marshal
+        run: |
           docker build --rm -t ztf_variable_marshal:latest -f Dockerfile .
+
       - name: Start the marshal
         run: |
-          docker run --name ztf_variable_marshal -d --restart always -p 8000:4000 -v ztf_variable_marshal_data:/data --link mongo:kowalski-mongo ztf_variable_marshal:latest
+          docker run --name ztf_variable_marshal -d --restart always -p 8000:4000 -v ztf_variable_marshal_data:/data --link ztf_variable_marshal_mongo_1:mongo ztf_variable_marshal:latest
 
       - name: Wait for marshal to start
         run: |
-          sleep 10
+          sleep 15
 
       - name: Docker Logs
         run: |
