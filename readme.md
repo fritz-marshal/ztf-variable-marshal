@@ -79,6 +79,10 @@ Create `secrets.json` with confidential/secret data:
         "token": null // set to your token
       }
     },
+    "fritz": {
+      "url": "https://fritz.science",
+      "token": null // set to your token, optional
+    }
   }
 }
 ```

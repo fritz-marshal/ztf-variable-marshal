@@ -332,7 +332,6 @@ Alternatively, for a single source, either two numbers [deg deg] or two strings 
         // display details
         function detailFormatter(index, row, element) {
             var html = [];
-            console.log(row)
 
             {#let jdd = new JulianDate();#}
             {#let date_utc = moment(jdd.julian(parseFloat(row['jd'])).getDate()).utc().format('YYYYMMDD');#}
