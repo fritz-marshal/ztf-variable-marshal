@@ -262,9 +262,6 @@
                                     {% else %}
                                         {% set dec_string = source['dec'] | string %}
                                     {% endif %}
-                                    <a href="javascript:document.getElementById('kowalski_form').submit();"
-                                       role="button" class="btn btn-secondary btn-sm"
-                                            id="survey_ztf_alerts">ZTF Alerts</a>
                                     <a href="https://ps1images.stsci.edu/cgi-bin/ps1cutouts?pos={{ source['ra'] }}{{ dec_string }}&filter=color&filter=g&filter=r&filter=i&filter=z&filter=y&filetypes=stack&auxiliary=data&size=240&output_size=0&verbose=0&autoscale=99.500000&catlist="
                                        target="_blank" role="button" class="btn btn-secondary btn-sm"
                                             id="survey_panstarrs">PanSTARRS-1</a>
@@ -327,10 +324,31 @@
     ...
  ]
         }</code></pre>
-                                "wavelen_unit" can be "A", "nm", or "m".
+                                "wavelength_unit" can be "A", "nm", or "m".
                                 You can use either mjd or hjd for the time stamp.
                                 Other fields above are mandatory, however you can add any custom fields.
                                 </p>
+                                <!-- if the source has 'has_fritz_spectra' True, show a test like: "Nearby sources with spectra found in Fritz" -->
+                                <div class="mt-2">
+                                    <b>Fritz sources (with spectra, within 3 arcsec):</b>
+                                    {% if source['fritz_sources'] | length > 0 %}
+                                            {% for fritz_source in source['fritz_sources'] %}
+                                            <div class="mt-1" style="display: flex; flex-direction: row; align-items: center;">
+                                                <p>
+                                                    <a href="http://fritz.science/source/{{ fritz_source }}" target="_blank" role="button" class="btn btn-secondary btn-sm">
+                                                    {{ fritz_source }}
+                                                    </a>
+                                                    <!-- add a button to import spectra -->
+                                                    <button type="button" class="btn btn-dark btn-sm"
+                                                            id="import_fritz_spectra" onclick="import_fritz_spectra('{{ fritz_source }}')">Import</button>
+                                                </p>
+                                            </div>
+                                            {% endfor %}
+                                    {% else %}
+                                        <p><em>No sources found.</em></p>
+                                    {% endif %}
+                                </div>
+
                             </div>
 
                             <div class="tab-pane fade mt-2" id="nav-auxiliary"
@@ -541,7 +559,7 @@
                             error_y: {type: 'data',
                                       array: {{ lc['data'][key]['magerr'] }},
                                       width: 2,
-                                      thickness: 0.8,
+                                      thickness: 0.4,
                                       color: "{{ lc['color'] }}",
                                       opacity: 0.5,
                                       visible: true},
@@ -1269,6 +1287,50 @@
                 {% endfor %}
             });
         {% endif %}
+
+        {# import spectra from a fritz source, takes the source id as input #}
+        function import_fritz_spectra(source_id) {
+            bootbox.confirm({
+                message: "Do you want to import spectra from a fritz source?",
+                buttons: {
+                    cancel: {
+                        label: '<i class="fas fa-times"></i> No'
+                    },
+                    confirm: {
+                        label: '<i class="fas fa-check"></i> Yes'
+                    }
+                },
+                callback: function (result) {
+                    // confirmed?
+                    if (result) {
+                        $.ajax({url: '{{-script_root-}}/sources/{{-source["_id"]-}}',
+                            method: 'POST',
+                            data: JSON.stringify({'action': 'import_fritz_spectra', 'source_id': source_id}),
+                            processData: false,
+                            contentType: 'application/json',
+                            success: function(data) {
+                                if (data['message'] === 'success') {
+                                    showFlashingMessage('Info:', 'Successfully imported spectra: ' + data['message'], 'success');
+                                    setTimeout(window.location.href = '{{-script_root-}}/sources/{{ source["_id"] }}', 1000);
+                                }
+                                else if (data['message'] === `All spectra from fritz source ${source_id} already imported`) {
+                                    showFlashingMessage('Info:', `All spectra from fritz source ${source_id} already imported`, 'info');
+                                }
+                                else {
+                                    showFlashingMessage('Info:', 'Failed to import spectra: ' + data['message'], 'danger');
+                                }
+                            },
+                            error: function(data) {
+                                showFlashingMessage('Info:', 'Failed to import spectra', 'danger');
+                            }
+                        });
+                    }
+                }
+            });
+        }
+
+        {# import light curves from a fritz source, takes the source id as input #}
+
     </script>
 
 {% endblock %}

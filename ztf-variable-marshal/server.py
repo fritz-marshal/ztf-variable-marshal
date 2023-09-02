@@ -11,6 +11,7 @@ from typing import Mapping
 
 import aiofiles
 import aiohttp
+from astropy.time import Time
 import aiohttp_jinja2
 import jinja2
 import jwt
@@ -182,6 +183,30 @@ async def add_master_program(_mongo):
             _err = traceback.format_exc()
             print(_err)
 
+
+# query fritz
+def api(endpoint, method="GET", data=None):
+    import requests
+
+    try:
+        base_url = config["fritz"]["url"]
+        token = config["fritz"]["token"]
+        response = requests.request(
+            method,
+            f"{base_url}/api/{endpoint}",
+            headers={"Authorization": f"token {token}"},  # noqa
+            json=data,
+        )
+        if response.status_code != 200:
+            raise Exception(response.text)
+        else:
+            q = response.json()["data"]
+        return q
+    except Exception:
+        return None
+
+
+fritz_instruments = api("instrument")
 
 routes = web.RouteTableDef()
 
@@ -2142,6 +2167,14 @@ async def source_get_handler(request):
         .to_list(length=None)
     )
 
+    data = api(
+        f"sources?ra={source['ra']}&dec={source['dec']}&radius={3/3600}&hasSpectrum=true"
+    )
+    if data is not None and len(data.get("sources", [])) > 0:
+        source["fritz_sources"] = [d["id"] for d in data["sources"]]
+    else:
+        source["fritz_sources"] = []
+
     context = {
         "logo": config["server"]["logo"],
         "user": session["user_id"],
@@ -3624,6 +3657,104 @@ async def source_post_handler(request):
                 )
 
                 return web.json_response({"message": "success"}, status=200)
+
+            elif _r["action"] == "import_fritz_spectra":
+                # fetch spectra from Fritz for the source in _r.get('source_id', None)
+                # and ingest them into the source
+
+                fritz_source_id = _r.get("source_id", None)
+                data = api(f"sources/{fritz_source_id}/spectra", method="GET")
+                if data is not None and len(data.get("spectra", [])) > 0:
+                    new = False
+                    for fritz_spectrum in data["spectra"]:
+                        try:
+                            telescope = [
+                                fritz_instrument["telescope"]
+                                for fritz_instrument in fritz_instruments
+                                if fritz_instrument["name"]
+                                == fritz_spectrum["instrument_name"]
+                            ][0]["nickname"]
+                        except Exception:
+                            telescope = "Unknown"
+
+                        flux_unit = fritz_spectrum["units"]
+                        if flux_unit in [None, "None", ""]:
+                            flux_unit = fritz_spectrum.get("altdata", {}).get(
+                                "BUNIT", "Unknown"
+                            )
+
+                        spectrum = {
+                            "instrument": fritz_spectrum["instrument_name"],
+                            "telescope": telescope,
+                            "filter": "Unknown",
+                            "wavelength_unit": "A",
+                            "flux_unit": flux_unit,
+                            "data": {
+                                "wavelength": fritz_spectrum["wavelengths"],
+                                "flux": fritz_spectrum["fluxes"],
+                                "fluxerr": fritz_spectrum["errors"],
+                            },
+                            "mjd": Time(
+                                fritz_spectrum["observed_at"], format="isot"
+                            ).mjd,
+                        }
+
+                        # check that there isn't a spectrum with the same mjd, instrument, telescope, filter already
+                        # in the source
+                        existing_spectra = source["spec"]
+                        exists = False
+                        for existing_spectrum in existing_spectra:
+                            if (
+                                existing_spectrum["mjd"] == spectrum["mjd"]
+                                and existing_spectrum["instrument"]
+                                == spectrum["instrument"]
+                                and existing_spectrum["telescope"]
+                                == spectrum["telescope"]
+                                and existing_spectrum["filter"] == spectrum["filter"]
+                            ):
+                                exists = True
+                                break
+
+                        if exists:
+                            continue
+
+                        # generate unique _id:
+                        spectrum["_id"] = random_alphanumeric_str(length=24)
+
+                        # make history
+                        time_tag = utc_now()
+                        h = {
+                            "note_type": "spec",
+                            "time_tag": time_tag,
+                            "user": user,
+                            "note": f'{spectrum["telescope"]} {spectrum["instrument"]} {spectrum["filter"]}',
+                        }
+
+                        await request.app["mongo"].sources.update_one(
+                            {"_id": _id},
+                            {
+                                "$push": {"spec": spectrum, "history": h},
+                                "$set": {"last_modified": utc_now()},
+                            },
+                        )
+                        new = True
+
+                    if not new:
+                        return web.json_response(
+                            {
+                                "message": f"All spectra from fritz source {fritz_source_id} already imported"
+                            },
+                            status=200,
+                        )
+
+                    return web.json_response({"message": "success"}, status=200)
+                else:
+                    return web.json_response(
+                        {
+                            "message": f"failure: no spectra found in fritz for {fritz_source_id}"
+                        },
+                        status=200,
+                    )
 
             else:
                 return web.json_response(
